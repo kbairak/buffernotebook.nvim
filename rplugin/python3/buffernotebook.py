@@ -1,5 +1,6 @@
 import ast
 import re
+import threading
 
 import pynvim
 import pynvim.api
@@ -12,6 +13,10 @@ class BufferNotebook:
 
         self.enabled = False
         self.namespace = self.nvim.api.create_namespace("BufferNotebookNamepsace")
+
+        self.globals = {"__name__": "__main__"}
+        self.cache = []
+        self.timer = None
 
     def enable(self):
         self.enabled = True
@@ -33,13 +38,20 @@ class BufferNotebook:
     def on_change(self):
         if not self.enabled:
             return
+        if self.timer is not None:
+            self.timer.cancel()
+        self.timer = threading.Timer(0.3, lambda: self.nvim.async_call(self._on_change))
+        self.timer.start()
+
+    def _on_change(self):
+        self.timer = None
         self.clear()
 
         lines = self.nvim.api.buf_get_lines(self.buffer, 0, -1, False)
 
         tree = self.parse()
 
-        top_level_statements = [
+        top_level_statements: list[tuple[int, int, ast.stmt]] = [
             (
                 statement.lineno - 1,
                 (statement.end_lineno or statement.lineno) - 1,
@@ -55,11 +67,22 @@ class BufferNotebook:
             elif re.search(r"^# <<<\s*$", line):
                 fullline_marks.add(i)
 
-        self.globals = {"__name__": "__main__"}
         for i, (start_line_number, end_line_number, statement) in enumerate(
             top_level_statements
         ):
-            result = self.run_statement(statement)
+            key = ast.dump(statement)
+            try:
+                cache_key, cache_result = self.cache[i]
+            except IndexError:
+                result = self.run_statement(statement)
+                self.cache.append((key, result))
+            else:
+                if key == cache_key:
+                    result = cache_result
+                else:
+                    self.cache = self.cache[:i]
+                    result = self.run_statement(statement)
+                    self.cache.append((ast.dump(statement), result))
 
             for line_number in (
                 set(range(start_line_number, end_line_number + 1)) & inline_marks
@@ -96,7 +119,7 @@ class BufferNotebook:
                 return lines[:stop] + self._parse(lines[stop:])
         return [""] + self._parse(lines[1:])
 
-    def run_statement(self, statement: ast.AST) -> str:
+    def run_statement(self, statement: ast.stmt) -> str:
         if (
             isinstance(statement, ast.Assign)
             and len(statement.targets) == 1
@@ -104,12 +127,31 @@ class BufferNotebook:
         ):
             try:
                 exec(
-                    compile(ast.Module(body=[statement]), "<string>", "exec"),
+                    compile(
+                        ast.Module(body=[statement], type_ignores=[]),
+                        "<string>",
+                        "exec",
+                    ),
                     self.globals,
                 )
             except Exception as exc:
                 return f"! {exc!r}"
             return repr(self.globals[statement.targets[0].id])
+        elif isinstance(statement, ast.AugAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            try:
+                exec(
+                    compile(
+                        ast.Module(body=[statement], type_ignores=[]),
+                        "<string>",
+                        "exec",
+                    ),
+                    self.globals,
+                )
+            except Exception as exc:
+                return f"! {exc!r}"
+            return repr(self.globals[statement.target.id])
         elif isinstance(statement, ast.Expr):
             try:
                 return repr(
@@ -123,7 +165,11 @@ class BufferNotebook:
         else:
             try:
                 exec(
-                    compile(ast.Module(body=[statement]), "<string>", "exec"),
+                    compile(
+                        ast.Module(body=[statement], type_ignores=[]),
+                        "<string>",
+                        "exec",
+                    ),
                     self.globals,
                 )
             except Exception:
@@ -163,3 +209,8 @@ class BufferNotebookPlugin:
     @pynvim.autocmd("TextChanged,TextChangedI", pattern="*")
     def on_change(self, *_):
         self.get_notebook().on_change()
+
+    @pynvim.autocmd("BufDelete", pattern="*")
+    def on_buffer_delete(self, *_):
+        buffer = self.nvim.current.buffer
+        del self.notebooks[buffer.number]

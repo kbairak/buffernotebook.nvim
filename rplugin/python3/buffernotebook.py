@@ -5,6 +5,10 @@ import threading
 import pynvim
 import pynvim.api
 
+# TODOs:
+# - Command/mapping to save results in buffer
+# - Command/mapping to clear cache and re-evaluate
+
 
 class BufferNotebook:
     def __init__(self, nvim: pynvim.Nvim, buffer: pynvim.api.Buffer):
@@ -107,16 +111,32 @@ class BufferNotebook:
         return ast.parse("\n".join(self._parse(lines)))
 
     def _parse(self, lines: list[str]) -> list[str]:
+        """Assuming most lines are ok, try to replacing as few lines as possible with empty ones so
+        that the end result is parse-able.
+        """
+
         if not lines:
-            return []
+            return []  # Recursion exit
+
         stop = len(lines)
         while stop > 0:
             try:
+                # Bad:  [ G   G   G   B   G   G ]
+                # Bad:  [ G   G   G   B   G ] G
+                # Bad:  [ G   G   G   B ] G   G
+                # Good: [ G   G   G ] B   G   G
                 ast.parse("\n".join(lines[:stop]))
             except Exception:
                 stop -= 1
             else:
+                # Good:   [G G G]           B G G
+                # Return: [G G G] + _parse([B G G])
                 return lines[:stop] + self._parse(lines[stop:])
+
+        # Ended the for-loop without encountering a good chunk; (at least) first line must be bad
+        #          B             B             G G ...
+        # Return: [""] + _parse([B             G G ...])
+        # Return: [""] +        [""] + _parse([G G ...])
         return [""] + self._parse(lines[1:])
 
     def run_statement(self, statement: ast.stmt) -> str:
@@ -174,7 +194,7 @@ class BufferNotebook:
                 )
             except Exception:
                 pass
-            return "None"
+            return ""
 
     def echo(self, line_number: int, text: str):
         self.nvim.api.buf_set_virtual_text(

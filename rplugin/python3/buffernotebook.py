@@ -82,7 +82,7 @@ class BufferNotebook:
                 else:
                     self.cache = self.cache[:i]
                     result = self.run_statement(statement)
-                    self.cache.append((ast.dump(statement), result))
+                    self.cache.append((key, result))
 
             for line_number in (
                 set(range(start_line_number, end_line_number + 1)) & inline_marks

@@ -6,10 +6,10 @@ import pynvim
 import pynvim.api
 
 # TODOs:
-# - One command with one argument for everything
-# - Command/mapping to save results in buffer
-# - Command/mapping to clear cache and re-evaluate
-# - Render complex assigns  (eg `a, b = 1, 2`)
+# - [x] One command with one argument for everything
+# - [ ] Command/mapping to save results in buffer
+# - [ ] Command/mapping to clear cache and re-evaluate
+# - [ ] Render complex assigns  (eg `a, b = 1, 2`)
 
 
 class BufferNotebook:
@@ -216,18 +216,6 @@ class BufferNotebookPlugin:
             self.notebooks[buffer.number] = BufferNotebook(self.nvim, buffer)
         return self.notebooks[buffer.number]
 
-    @pynvim.command("BufferNotebookEnable", nargs="0", range="")
-    def enable(self, *_):
-        self.get_notebook().enable()
-
-    @pynvim.command("BufferNotebookDisable", nargs="0", range="")
-    def disable(self, *_):
-        self.get_notebook().disable()
-
-    @pynvim.command("BufferNotebookToggle", nargs="0", range="")
-    def toggle(self, *_):
-        self.get_notebook().toggle()
-
     @pynvim.autocmd("TextChanged,TextChangedI", pattern="*")
     def on_change(self, *_):
         self.get_notebook().on_change()
@@ -236,3 +224,21 @@ class BufferNotebookPlugin:
     def on_buffer_delete(self, *_):
         buffer = self.nvim.current.buffer
         del self.notebooks[buffer.number]
+
+    @pynvim.command(
+        "BufferNotebook", nargs=1, complete="customlist,BufferNotebookCompletions"
+    )
+    def command(self, args: str):
+        (subcommand,) = args
+        if subcommand == "enable":
+            self.get_notebook().enable()
+        elif subcommand == "disable":
+            self.get_notebook().disable()
+        elif subcommand == "toggle":
+            self.get_notebook().toggle()
+        else:  # pragma: no cover
+            raise Exception("Unreachable code")
+
+    @pynvim.function("BufferNotebookCompletions", sync=True)
+    def get_completions(self, *_):
+        return ["enable", "disable", "toggle"]

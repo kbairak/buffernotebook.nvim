@@ -6,8 +6,10 @@ import pynvim
 import pynvim.api
 
 # TODOs:
+# - One command with one argument for everything
 # - Command/mapping to save results in buffer
 # - Command/mapping to clear cache and re-evaluate
+# - Render complex assigns  (eg `a, b = 1, 2`)
 
 
 class BufferNotebook:
@@ -68,7 +70,7 @@ class BufferNotebook:
         for i, line in enumerate(lines):
             if re.search(r"#=\s*$", line):
                 inline_marks.add(i)
-            elif re.search(r"^# <<<\s*$", line):
+            elif re.search(r"^#\s<<<\s*$", line):
                 fullline_marks.add(i)
 
         for i, (start_line_number, end_line_number, statement) in enumerate(
@@ -93,17 +95,17 @@ class BufferNotebook:
             ):
                 self.echo(line_number, result)
 
-            if i < len(top_level_statements) - 1:
+            try:
                 (next_start_line_number, *_) = top_level_statements[i + 1]
+            except IndexError:
+                for line_number in fullline_marks:
+                    if line_number > end_line_number:
+                        self.echo(line_number, result)
+            else:
                 for line_number in (
                     set(range(end_line_number + 1, next_start_line_number))
                     & fullline_marks
                 ):
-                    self.echo(line_number, result)
-            else:
-                for line_number in fullline_marks:
-                    if line_number <= end_line_number:
-                        continue
                     self.echo(line_number, result)
 
     def parse(self) -> ast.Module:
@@ -118,20 +120,20 @@ class BufferNotebook:
         if not lines:
             return []  # Recursion exit
 
-        stop = len(lines)
-        while stop > 0:
+        end = len(lines)
+        while end > 0:
             try:
                 # Bad:  [ G   G   G   B   G   G ]
                 # Bad:  [ G   G   G   B   G ] G
                 # Bad:  [ G   G   G   B ] G   G
                 # Good: [ G   G   G ] B   G   G
-                ast.parse("\n".join(lines[:stop]))
+                ast.parse("\n".join(lines[:end]))
             except Exception:
-                stop -= 1
+                end -= 1
             else:
                 # Good:   [G G G]           B G G
                 # Return: [G G G] + _parse([B G G])
-                return lines[:stop] + self._parse(lines[stop:])
+                return lines[:end] + self._parse(lines[end:])
 
         # Ended the for-loop without encountering a good chunk; (at least) first line must be bad
         #          B             B             G G ...

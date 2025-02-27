@@ -8,7 +8,7 @@ import pynvim.api
 # TODOs:
 # - [✅] One command with one argument for everything
 # - [✅] Render complex assigns  (eg `a, b = 1, 2`)
-# - [ ] Command/mapping to clear cache and re-evaluate
+# - [✅] Command/mapping to clear cache and re-evaluate
 # - [ ] Command/mapping to save results in buffer
 # - [ ] Figure something out for multiline
 
@@ -223,6 +223,11 @@ class BufferNotebook:
             self.buffer, self.namespace, line_number, [(text, "Info")], {}
         )
 
+    def reset(self):
+        self.globals = {"__name__": "__main__"}
+        self.cache = []
+        self._on_change()
+
 
 @pynvim.plugin
 class BufferNotebookPlugin:
@@ -256,9 +261,11 @@ class BufferNotebookPlugin:
             self.get_notebook().disable()
         elif subcommand == "toggle":
             self.get_notebook().toggle()
+        elif subcommand == "reset":
+            self.get_notebook().reset()
         else:  # pragma: no cover
             raise Exception("Unreachable code")
 
     @pynvim.function("BufferNotebookCompletions", sync=True)
     def get_completions(self, *_):
-        return ["enable", "disable", "toggle"]
+        return ["enable", "disable", "toggle", "reset"]

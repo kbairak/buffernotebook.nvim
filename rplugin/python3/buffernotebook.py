@@ -302,7 +302,10 @@ class BufferNotebookPlugin:
     @pynvim.autocmd("BufDelete", pattern="*")
     def on_buffer_delete(self, *_):
         buffer = self.nvim.current.buffer
-        del self.notebooks[buffer.number]
+        try:
+            del self.notebooks[buffer.number]
+        except KeyError:
+            pass
 
     @pynvim.command(
         "BufferNotebook", nargs=1, complete="customlist,BufferNotebookCompletions"

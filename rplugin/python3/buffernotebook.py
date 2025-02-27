@@ -6,10 +6,11 @@ import pynvim
 import pynvim.api
 
 # TODOs:
-# - [x] One command with one argument for everything
-# - [ ] Command/mapping to save results in buffer
+# - [✅] One command with one argument for everything
+# - [✅] Render complex assigns  (eg `a, b = 1, 2`)
 # - [ ] Command/mapping to clear cache and re-evaluate
-# - [ ] Render complex assigns  (eg `a, b = 1, 2`)
+# - [ ] Command/mapping to save results in buffer
+# - [ ] Figure something out for multiline
 
 
 class BufferNotebook:
@@ -142,11 +143,7 @@ class BufferNotebook:
         return [""] + self._parse(lines[1:])
 
     def run_statement(self, statement: ast.stmt) -> str:
-        if (
-            isinstance(statement, ast.Assign)
-            and len(statement.targets) == 1
-            and isinstance(statement.targets[0], ast.Name)
-        ):
+        if isinstance(statement, ast.Assign):
             try:
                 exec(
                     compile(
@@ -158,7 +155,28 @@ class BufferNotebook:
                 )
             except Exception as exc:
                 return f"! {exc!r}"
-            return repr(self.globals[statement.targets[0].id])
+
+            if len(statement.targets) != 1:
+                return ""
+            if isinstance(statement.targets[0], ast.Tuple) and all(
+                isinstance(elt, ast.Name) for elt in statement.targets[0].elts
+            ):
+                result = []
+                for elt in statement.targets[0].elts:
+                    assert isinstance(elt, ast.Name)
+                    elt.ctx = ast.Load()
+                    result.append(
+                        eval(
+                            compile(ast.Expression(elt), "<string>", "eval"),
+                            self.globals,
+                        )
+                    )
+                return repr(tuple(result))
+            elif isinstance(statement.targets[0], ast.Name):
+                return repr(self.globals[statement.targets[0].id])
+            else:
+                return ""
+
         elif isinstance(statement, ast.AugAssign) and isinstance(
             statement.target, ast.Name
         ):
@@ -174,6 +192,7 @@ class BufferNotebook:
             except Exception as exc:
                 return f"! {exc!r}"
             return repr(self.globals[statement.target.id])
+
         elif isinstance(statement, ast.Expr):
             try:
                 return repr(
@@ -184,6 +203,7 @@ class BufferNotebook:
                 )
             except Exception as exc:
                 return f"! {exc!r}"
+
         else:
             try:
                 exec(

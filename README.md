@@ -24,7 +24,7 @@ system globally.
 }
 ```
 
-### Recommended configuration
+#### Recommended configuration
 
 ```lua
 {
@@ -67,6 +67,9 @@ will become
 These changes are not actually part of the buffer. They are displayed like LSP
 messages.
 
+Only top-level statements will be executed. Adding a mark inside a function or
+if/else block etc will not have an effect.
+
 You can assign values or computations to variables and they will be remembered:
 
 - ```python
@@ -83,7 +86,7 @@ You can assign values or computations to variables and they will be remembered:
 
   Changes are applied in real-time. So in the previous example, if you change
   the first line from `a = 1` to `a = 2`, then the result will immediately
-  change from `a + 1  #= 2` to `a + 1  #= 3` immediately.
+  change from `a + 1  #= 2` to `a + 1  #= 3`.
 
 - And you can import modules or define functions and use them:
   
@@ -127,6 +130,7 @@ You can assign values or computations to variables and they will be remembered:
 
     ```python
     "\n".join(['hello ' * 4] * 4)
+    ```
 
     will render this:
 
@@ -148,7 +152,7 @@ You can assign values or computations to variables and they will be remembered:
 
   ```python
   a = 1 
-  This is a line that cannot possible be parsed by python
+  This is a line that cannot possibly be parsed by Python
   a + 2  #=
   ```
 
@@ -186,7 +190,7 @@ You can assign values or computations to variables and they will be remembered:
     the exact same thing will not invalidate the cache (ie `a = 1000` and
     `a =  1_000` will be considered equivalent)
 
-- A statement that was just evaluated and that has a `# =` or `# <<<` mark
+- A statement that was just evaluated and that has a `#=` or `# <<<` mark
   associated with it will annotate the buffer with the result of that statement.
 
   - Assignments will annotate the value that was just assigned

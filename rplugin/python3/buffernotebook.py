@@ -33,10 +33,12 @@ class BufferNotebook:
     def enable(self):
         self.enabled = True
         self.on_change()
+        self.nvim.out_write("BufferNotebook enabled\n")
 
     def disable(self):
         self.enabled = False
         self.clear()
+        self.nvim.out_write("BufferNotebook disabled\n")
 
     def toggle(self):
         if self.enabled:
@@ -176,7 +178,10 @@ class BufferNotebook:
                     )
                 result = tuple(result)
             elif isinstance(statement.targets[0], ast.Name):
-                result = self.globals[statement.targets[0].id]
+                try:
+                    result = self.globals[statement.targets[0].id]
+                except KeyError:
+                    result = nothing_to_show
             else:
                 result = nothing_to_show
 

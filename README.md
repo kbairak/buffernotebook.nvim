@@ -202,4 +202,8 @@ works by tweaking simple use cases in real time.
 
 ### Regular expression debugging
 
+<https://github.com/user-attachments/assets/9ada4f4e-23c2-4cb4-bf7b-371d0f72eae6>
+
 ### Understanding how `lxml` works
+
+<https://github.com/user-attachments/assets/b86b540c-f2a6-4637-9650-11df22ddaf20>

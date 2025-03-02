@@ -71,7 +71,7 @@ class BufferNotebook:
         self.timer = None
         self.clear()
 
-        lines = self.nvim.api.buf_get_lines(self.buffer, 0, -1, False)
+        lines = tuple(self.nvim.api.buf_get_lines(self.buffer, 0, -1, False))
 
         tree = self.parse(lines)
 
@@ -114,7 +114,6 @@ class BufferNotebook:
                 ):
                     self.annotate(line_number, result)
 
-    @_convert_arg_from_list_to_tuple
     @functools.lru_cache
     def parse(self, lines: tuple[str, ...]) -> ast.Module:
         return ast.parse("\n".join(self._parse(lines)))
@@ -258,52 +257,49 @@ class BufferNotebook:
         self._on_change()
 
     def inject(self):
-        if not self.enabled:
-            self.enable()
-        lines = self.nvim.api.buf_get_lines(self.buffer, 0, -1, False)
-        current_line_position = self.nvim.api.win_get_cursor(0)[0] - 1
+        result, statement = self._evaluate_statement_under_cursor()
+        if result == nothing_to_show:
+            return
 
-        for index, statement in enumerate(self.parse(lines).body):
-            result = self.evaluate_statement(index, statement)
-            if (
-                statement.lineno - 1
-                <= current_line_position
-                <= (statement.end_lineno or statement.lineno)
-            ):
-                if result == nothing_to_show:
-                    break
+        assert statement is not None
+        inject_at = statement.end_lineno or statement.lineno
 
-                inject_at = statement.end_lineno or statement.lineno
-
-                if isinstance(result, Exception):
-                    chunks = [f"# <<< ! {result!r}"]
-                if isinstance(result, str):
-                    pprinted_lines = result.splitlines()
-                    chunks = [f"# <<< {pprinted_lines[0]}"] + [
-                        f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
-                    ]
-                else:
-                    pprinted_lines = pprint.pformat(
-                        result, sort_dicts=False, underscore_numbers=True
-                    ).splitlines()
-                    chunks = [f"# <<< {pprinted_lines[0]}"] + [
-                        f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
-                    ]
-                self.nvim.api.buf_set_lines(
-                    self.buffer,
-                    inject_at,
-                    inject_at,
-                    False,
-                    chunks,
-                )
-
-                break
+        if isinstance(result, Exception):
+            chunks = [f"# <<< ! {result!r}"]
+        if isinstance(result, str):
+            pprinted_lines = result.splitlines()
+            chunks = [f"# <<< {pprinted_lines[0]}"] + [
+                f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
+            ]
+        else:
+            pprinted_lines = pprint.pformat(
+                result, sort_dicts=False, underscore_numbers=True
+            ).splitlines()
+            chunks = [f"# <<< {pprinted_lines[0]}"] + [
+                f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
+            ]
+        self.nvim.api.buf_set_lines(
+            self.buffer,
+            inject_at,
+            inject_at,
+            False,
+            chunks,
+        )
 
     def copy(self):
+        result, _ = self._evaluate_statement_under_cursor()
+
+        if result == nothing_to_show:
+            return
+        if isinstance(result, str):
+            self.nvim.funcs.setreg("+", result)
+        else:
+            self.nvim.funcs.setreg("+", repr(result))
+
+    def _evaluate_statement_under_cursor(self) -> tuple[Any, ast.stmt | None]:
         if not self.enabled:
             self.enable()
-
-        lines = self.nvim.api.buf_get_lines(self.buffer, 0, -1, False)
+        lines = tuple(self.nvim.api.buf_get_lines(self.buffer, 0, -1, False))
         current_line_position = self.nvim.api.win_get_cursor(0)[0] - 1
 
         for index, statement in enumerate(self.parse(lines).body):
@@ -313,12 +309,9 @@ class BufferNotebook:
                 <= current_line_position
                 <= (statement.end_lineno or statement.lineno)
             ):
-                if result == nothing_to_show:
-                    break
-                if isinstance(result, str):
-                    self.nvim.funcs.setreg("+", result)
-                else:
-                    self.nvim.funcs.setreg("+", repr(result))
+                return result, statement
+
+        return nothing_to_show, None
 
 
 @pynvim.plugin

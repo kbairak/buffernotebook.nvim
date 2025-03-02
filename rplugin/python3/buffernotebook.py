@@ -1,4 +1,5 @@
 import ast
+import functools
 import pprint
 import re
 import threading
@@ -13,9 +14,18 @@ import pynvim.api
 # - [✅] Command/mapping to clear cache and re-evaluate
 # - [✅] Command/mapping to save results in buffer
 # - [✅] Figure something out for multiline
+# - [✅] Copy to clipboard
 
 
 nothing_to_show = object()
+
+
+def _convert_arg_from_list_to_tuple(func):
+    @functools.wraps(func)
+    def decorated(self, lines: list[str]):
+        return func(self, tuple(lines))
+
+    return decorated
 
 
 class BufferNotebook:
@@ -104,16 +114,18 @@ class BufferNotebook:
                 ):
                     self.annotate(line_number, result)
 
-    def parse(self, lines: list[str]) -> ast.Module:
+    @_convert_arg_from_list_to_tuple
+    @functools.lru_cache
+    def parse(self, lines: tuple[str, ...]) -> ast.Module:
         return ast.parse("\n".join(self._parse(lines)))
 
-    def _parse(self, lines: list[str]) -> list[str]:
+    def _parse(self, lines: tuple[str, ...]) -> tuple[str, ...]:
         """Assuming most lines are ok, try to replacing as few lines as possible with empty ones so
         that the end result is parse-able.
         """
 
         if not lines:
-            return []  # Recursion exit
+            return ()  # Recursion exit
 
         end = len(lines)
         while end > 0:
@@ -134,7 +146,7 @@ class BufferNotebook:
         #          B             B             G G ...
         # Return: [""] + _parse([B             G G ...])
         # Return: [""] +        [""] + _parse([G G ...])
-        return [""] + self._parse(lines[1:])
+        return ("",) + self._parse(lines[1:])
 
     def evaluate_statement(self, index: int, statement: ast.stmt) -> Any:
         key = ast.dump(statement)
@@ -287,6 +299,27 @@ class BufferNotebook:
 
                 break
 
+    def copy(self):
+        if not self.enabled:
+            self.enable()
+
+        lines = self.nvim.api.buf_get_lines(self.buffer, 0, -1, False)
+        current_line_position = self.nvim.api.win_get_cursor(0)[0] - 1
+
+        for index, statement in enumerate(self.parse(lines).body):
+            result = self.evaluate_statement(index, statement)
+            if (
+                statement.lineno - 1
+                <= current_line_position
+                <= (statement.end_lineno or statement.lineno)
+            ):
+                if result == nothing_to_show:
+                    break
+                if isinstance(result, str):
+                    self.nvim.funcs.setreg("+", result)
+                else:
+                    self.nvim.funcs.setreg("+", repr(result))
+
 
 @pynvim.plugin
 class BufferNotebookPlugin:
@@ -327,9 +360,11 @@ class BufferNotebookPlugin:
             self.get_notebook().reset()
         elif subcommand == "inject":
             self.get_notebook().inject()
+        elif subcommand == "copy":
+            self.get_notebook().copy()
         else:  # pragma: no cover
             raise Exception("Unreachable code")
 
     @pynvim.function("BufferNotebookCompletions", sync=True)
     def get_completions(self, *_):
-        return ["enable", "disable", "toggle", "reset", "inject"]
+        return ["enable", "disable", "toggle", "reset", "inject", "copy"]

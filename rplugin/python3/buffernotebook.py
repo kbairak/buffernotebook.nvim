@@ -3,7 +3,7 @@ import functools
 import pprint
 import re
 import threading
-from typing import Any
+from typing import Any, Optional
 
 import pynvim
 import pynvim.api
@@ -86,7 +86,7 @@ class BufferNotebook:
 
         inline_marks, fullline_marks = set(), set()
         for index, line in enumerate(lines):
-            if re.search(r"#=\s*$", line):
+            if re.search(r"#\s*=\s*$", line):
                 inline_marks.add(index)
             elif re.search(r"^#\s<<<\s*$", line):
                 fullline_marks.add(index)
@@ -272,9 +272,7 @@ class BufferNotebook:
                 f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
             ]
         else:
-            pprinted_lines = pprint.pformat(
-                result, sort_dicts=False, underscore_numbers=True
-            ).splitlines()
+            pprinted_lines = pprint.pformat(result, sort_dicts=False).splitlines()
             chunks = [f"# <<< {pprinted_lines[0]}"] + [
                 f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
             ]
@@ -296,7 +294,7 @@ class BufferNotebook:
         else:
             self.nvim.funcs.setreg("+", repr(result))
 
-    def _evaluate_statement_under_cursor(self) -> tuple[Any, ast.stmt | None]:
+    def _evaluate_statement_under_cursor(self) -> tuple[Any, Optional[ast.stmt]]:
         if not self.enabled:
             self.enable()
         lines = tuple(self.nvim.api.buf_get_lines(self.buffer, 0, -1, False))

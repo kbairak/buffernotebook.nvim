@@ -172,29 +172,30 @@ class BufferNotebook:
             except Exception as exc:
                 result = exc
 
-            if len(statement.targets) != 1:
-                result = nothing_to_show
-            if isinstance(statement.targets[0], ast.Tuple) and all(
-                isinstance(elt, ast.Name) for elt in statement.targets[0].elts
-            ):
-                result = []
-                for elt in statement.targets[0].elts:
-                    assert isinstance(elt, ast.Name)
-                    elt.ctx = ast.Load()
-                    result.append(
-                        eval(
-                            compile(ast.Expression(elt), "<string>", "eval"),
-                            self.globals,
-                        )
-                    )
-                result = tuple(result)
-            elif isinstance(statement.targets[0], ast.Name):
-                try:
-                    result = self.globals[statement.targets[0].id]
-                except KeyError:
-                    result = nothing_to_show
             else:
-                result = nothing_to_show
+                if len(statement.targets) != 1:
+                    result = nothing_to_show
+                if isinstance(statement.targets[0], ast.Tuple) and all(
+                    isinstance(elt, ast.Name) for elt in statement.targets[0].elts
+                ):
+                    result = []
+                    for elt in statement.targets[0].elts:
+                        assert isinstance(elt, ast.Name)
+                        elt.ctx = ast.Load()
+                        result.append(
+                            eval(
+                                compile(ast.Expression(elt), "<string>", "eval"),
+                                self.globals,
+                            )
+                        )
+                    result = tuple(result)
+                elif isinstance(statement.targets[0], ast.Name):
+                    try:
+                        result = self.globals[statement.targets[0].id]
+                    except KeyError:
+                        result = nothing_to_show
+                else:
+                    result = nothing_to_show
 
         elif isinstance(statement, ast.AugAssign) and isinstance(
             statement.target, ast.Name

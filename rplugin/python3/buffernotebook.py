@@ -15,17 +15,10 @@ import pynvim.api
 # - [✅] Command/mapping to save results in buffer
 # - [✅] Figure something out for multiline
 # - [✅] Copy to clipboard
+# - [ ] Show multiline annotations in popup on hover
 
 
 nothing_to_show = object()
-
-
-def _convert_arg_from_list_to_tuple(func):
-    @functools.wraps(func)
-    def decorated(self, lines: list[str]):
-        return func(self, tuple(lines))
-
-    return decorated
 
 
 class BufferNotebook:
@@ -175,25 +168,26 @@ class BufferNotebook:
             else:
                 if len(statement.targets) != 1:
                     result = nothing_to_show
+
                 if isinstance(statement.targets[0], ast.Tuple) and all(
                     isinstance(elt, ast.Name) for elt in statement.targets[0].elts
                 ):
                     result = []
-                    for elt in statement.targets[0].elts:
-                        assert isinstance(elt, ast.Name)
-                        elt.ctx = ast.Load()
-                        result.append(
-                            eval(
-                                compile(ast.Expression(elt), "<string>", "eval"),
-                                self.globals,
-                            )
-                        )
-                    result = tuple(result)
+                    try:
+                        for elt in statement.targets[0].elts:
+                            assert isinstance(elt, ast.Name)
+                            result.append(self.globals[elt.id])
+                    except KeyError:
+                        result = nothing_to_show
+                    else:
+                        result = tuple(result)
+
                 elif isinstance(statement.targets[0], ast.Name):
                     try:
                         result = self.globals[statement.targets[0].id]
                     except KeyError:
                         result = nothing_to_show
+
                 else:
                     result = nothing_to_show
 
@@ -211,7 +205,11 @@ class BufferNotebook:
                 )
             except Exception as exc:
                 result = exc
-            result = self.globals[statement.target.id]
+            else:
+                try:
+                    result = self.globals[statement.target.id]
+                except KeyError:
+                    result = nothing_to_show
 
         elif isinstance(statement, ast.Expr):
             try:
@@ -235,7 +233,8 @@ class BufferNotebook:
                 )
             except Exception as exc:
                 result = exc
-            result = nothing_to_show
+            else:
+                result = nothing_to_show
 
         self.cache.append((key, result))
         return result

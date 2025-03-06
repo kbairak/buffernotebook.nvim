@@ -15,7 +15,7 @@ import pynvim.api
 # - [✅] Command/mapping to save results in buffer
 # - [✅] Figure something out for multiline
 # - [✅] Copy to clipboard
-# - [ ] Show multiline annotations in popup on hover
+# - [✅] Show multiline annotations in popup on hover
 
 
 nothing_to_show = object()
@@ -32,6 +32,7 @@ class BufferNotebook:
         self.globals = {"__name__": "__main__"}
         self.cache: list[tuple[str, Any]] = []
         self.timer = None
+        self.popup_window = None
 
     def enable(self):
         self.enabled = True
@@ -41,6 +42,9 @@ class BufferNotebook:
     def disable(self):
         self.enabled = False
         self.clear()
+        if self.popup_window is not None:
+            self.nvim.api.win_close(self.popup_window, True)
+            self.popup_window = None
         self.nvim.out_write("BufferNotebook disabled\n")
 
     def toggle(self):
@@ -68,44 +72,28 @@ class BufferNotebook:
 
         tree = self.parse(lines)
 
-        top_level_statements: list[tuple[int, int, ast.stmt]] = [
-            (
-                statement.lineno - 1,
-                (statement.end_lineno or statement.lineno) - 1,
-                statement,
-            )
-            for statement in tree.body
+        top_level_statements: list[tuple[int, ast.stmt]] = [
+            (statement.lineno - 1, statement) for statement in tree.body
         ]
 
-        inline_marks, fullline_marks = set(), set()
+        marks = set()
         for index, line in enumerate(lines):
-            if re.search(r"#\s*=\s*$", line):
-                inline_marks.add(index)
-            elif re.search(r"^#\s<<<\s*$", line):
-                fullline_marks.add(index)
+            if self._has_mark(line):
+                marks.add(index)
 
-        for index, (start_line_number, end_line_number, statement) in enumerate(
-            top_level_statements
-        ):
+        for index, (start_line_number, statement) in enumerate(top_level_statements):
             result = self.evaluate_statement(index, statement)
 
-            for line_number in (
-                set(range(start_line_number, end_line_number + 1)) & inline_marks
-            ):
+            try:
+                end, _ = top_level_statements[index + 1]
+            except IndexError:
+                end = len(lines)
+            for line_number in set(range(start_line_number, end)) & marks:
                 self.annotate(line_number, result)
 
-            try:
-                (next_start_line_number, *_) = top_level_statements[index + 1]
-            except IndexError:
-                for line_number in fullline_marks:
-                    if line_number > end_line_number:
-                        self.annotate(line_number, result)
-            else:
-                for line_number in (
-                    set(range(end_line_number + 1, next_start_line_number))
-                    & fullline_marks
-                ):
-                    self.annotate(line_number, result)
+    @staticmethod
+    def _has_mark(line):
+        return re.search(r"#\s*=\s*$", line) or re.search(r"^#\s<<<\s*$", line)
 
     @functools.lru_cache
     def parse(self, lines: tuple[str, ...]) -> ast.Module:
@@ -240,7 +228,7 @@ class BufferNotebook:
         return result
 
     def annotate(self, line_number: int, value: Any):
-        if value == nothing_to_show:
+        if value is nothing_to_show:
             return
         elif isinstance(value, Exception):
             text = f"! {value!r}"
@@ -258,41 +246,70 @@ class BufferNotebook:
 
     def inject(self):
         result, statement = self._evaluate_statement_under_cursor()
-        if result == nothing_to_show:
+        if result is nothing_to_show:
             return
 
         assert statement is not None
         inject_at = statement.end_lineno or statement.lineno
 
-        if isinstance(result, Exception):
-            chunks = [f"# <<< ! {result!r}"]
-        if isinstance(result, str):
-            pprinted_lines = result.splitlines()
-            chunks = [f"# <<< {pprinted_lines[0]}"] + [
-                f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
-            ]
-        else:
-            pprinted_lines = pprint.pformat(result, sort_dicts=False).splitlines()
-            chunks = [f"# <<< {pprinted_lines[0]}"] + [
-                f"# ... {pprinted_line}" for pprinted_line in pprinted_lines[1:]
-            ]
+        chunks = self._format_multiline_result(result).splitlines()
+
         self.nvim.api.buf_set_lines(
             self.buffer,
             inject_at,
             inject_at,
             False,
-            chunks,
+            [f"# >>> {chunks[0]}"] + [f"# ... {chunk}" for chunk in chunks[1:]],
         )
 
     def copy(self):
         result, _ = self._evaluate_statement_under_cursor()
 
-        if result == nothing_to_show:
+        if result is nothing_to_show:
             return
         if isinstance(result, str):
             self.nvim.funcs.setreg("+", result)
         else:
             self.nvim.funcs.setreg("+", repr(result))
+
+    def on_cursor_moved(self):
+        if self.popup_window is not None:
+            self.nvim.api.win_close(self.popup_window, True)
+            self.popup_window = None
+
+        if not self.enabled:
+            return
+
+        lines = tuple(self.nvim.api.buf_get_lines(self.buffer, 0, -1, False))
+        current_line_position = self.nvim.api.win_get_cursor(0)[0] - 1
+
+        if not self._has_mark(lines[current_line_position]):
+            return
+
+        result, _ = self._evaluate_statement_under_cursor()
+        if result is nothing_to_show:
+            return
+        result = self._format_multiline_result(result)
+        if "\n" not in result:
+            return
+
+        popup_buffer = self.nvim.api.create_buf(False, True)
+        self.nvim.api.buf_set_lines(popup_buffer, 0, -1, False, result.splitlines())
+        width = max(len(line) for line in result.splitlines())
+        height = len(result.splitlines())
+        self.popup_window = self.nvim.api.open_win(
+            popup_buffer,
+            False,
+            {
+                "relative": "cursor",
+                "width": width,
+                "height": height,
+                "col": 0,
+                "row": 1,
+                "style": "minimal",
+                "border": "single",
+            },
+        )
 
     def _evaluate_statement_under_cursor(self) -> tuple[Any, Optional[ast.stmt]]:
         if not self.enabled:
@@ -310,6 +327,14 @@ class BufferNotebook:
                 return result, statement
 
         return nothing_to_show, None
+
+    def _format_multiline_result(self, result: Any):
+        if isinstance(result, Exception):
+            return f"! {result!r}"
+        elif isinstance(result, str):
+            return result
+        else:
+            return pprint.pformat(result, sort_dicts=False)
 
 
 @pynvim.plugin
@@ -335,6 +360,10 @@ class BufferNotebookPlugin:
             del self.notebooks[buffer.number]
         except KeyError:
             pass
+
+    @pynvim.autocmd("CursorMoved", pattern="*")
+    def on_cursor_moved(self, *_):
+        self.get_notebook().on_cursor_moved()
 
     @pynvim.command(
         "BufferNotebook", nargs=1, complete="customlist,BufferNotebookCompletions"

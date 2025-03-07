@@ -16,6 +16,7 @@ import pynvim.api
 # - [✅] Figure something out for multiline
 # - [✅] Copy to clipboard
 # - [✅] Show multiline annotations in popup on hover
+# - [ ] Annotate import statements
 
 
 nothing_to_show = object()
@@ -70,16 +71,11 @@ class BufferNotebook:
 
         lines = tuple(self.nvim.api.buf_get_lines(self.buffer, 0, -1, False))
 
-        tree = self.parse(lines)
-
         top_level_statements: list[tuple[int, ast.stmt]] = [
-            (statement.lineno - 1, statement) for statement in tree.body
+            (statement.lineno - 1, statement) for statement in self.parse(lines).body
         ]
 
-        marks = set()
-        for index, line in enumerate(lines):
-            if self._has_mark(line):
-                marks.add(index)
+        marks = {index for index, line in enumerate(lines) if self._has_mark(line)}
 
         for index, (start_line_number, statement) in enumerate(top_level_statements):
             result = self.evaluate_statement(index, statement)

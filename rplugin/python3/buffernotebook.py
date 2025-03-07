@@ -138,14 +138,7 @@ class BufferNotebook:
 
         if isinstance(statement, ast.Assign):
             try:
-                exec(
-                    compile(
-                        ast.Module(body=[statement], type_ignores=[]),
-                        "<string>",
-                        "exec",
-                    ),
-                    self.globals,
-                )
+                self._do_exec(statement)
             except Exception as exc:
                 result = exc
 
@@ -179,14 +172,7 @@ class BufferNotebook:
             statement.target, ast.Name
         ):
             try:
-                exec(
-                    compile(
-                        ast.Module(body=[statement], type_ignores=[]),
-                        "<string>",
-                        "exec",
-                    ),
-                    self.globals,
-                )
+                self._do_exec(statement)
             except Exception as exc:
                 result = exc
             else:
@@ -207,14 +193,7 @@ class BufferNotebook:
 
         elif isinstance(statement, (ast.Import, ast.ImportFrom)):
             try:
-                exec(
-                    compile(
-                        ast.Module(body=[statement], type_ignores=[]),
-                        "<string>",
-                        "exec",
-                    ),
-                    self.globals,
-                )
+                self._do_exec(statement)
             except Exception as exc:
                 result = exc
             else:
@@ -233,14 +212,7 @@ class BufferNotebook:
 
         else:
             try:
-                exec(
-                    compile(
-                        ast.Module(body=[statement], type_ignores=[]),
-                        "<string>",
-                        "exec",
-                    ),
-                    self.globals,
-                )
+                self._do_exec(statement)
             except Exception as exc:
                 result = exc
             else:
@@ -357,6 +329,16 @@ class BufferNotebook:
             return result
         else:
             return pprint.pformat(result, sort_dicts=False)
+
+    def _do_exec(self, statement):
+        exec(
+            compile(
+                ast.Module(body=[statement], type_ignores=[]),
+                "<string>",
+                "exec",
+            ),
+            self.globals,
+        )
 
 
 @pynvim.plugin

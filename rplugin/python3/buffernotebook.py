@@ -16,7 +16,7 @@ import pynvim.api
 # - [✅] Figure something out for multiline
 # - [✅] Copy to clipboard
 # - [✅] Show multiline annotations in popup on hover
-# - [ ] Annotate import statements
+# - [✅] Annotate import statements
 
 
 nothing_to_show = object()
@@ -204,6 +204,32 @@ class BufferNotebook:
 
             except Exception as exc:
                 result = exc
+
+        elif isinstance(statement, (ast.Import, ast.ImportFrom)):
+            try:
+                exec(
+                    compile(
+                        ast.Module(body=[statement], type_ignores=[]),
+                        "<string>",
+                        "exec",
+                    ),
+                    self.globals,
+                )
+            except Exception as exc:
+                result = exc
+            else:
+                try:
+                    result = [
+                        self.globals[name.asname or name.name]
+                        for name in statement.names
+                    ]
+                except KeyError:
+                    result = nothing_to_show
+                else:
+                    if len(result) == 1:
+                        result = result[0]
+                    else:
+                        result = tuple(result)
 
         else:
             try:

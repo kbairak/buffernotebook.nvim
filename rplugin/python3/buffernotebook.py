@@ -17,6 +17,7 @@ import pynvim.api
 # - [✅] Copy to clipboard
 # - [✅] Show multiline annotations in popup on hover
 # - [✅] Annotate import statements
+# - [ ] Don't run python while python is running
 
 
 nothing_to_show = object()
@@ -38,6 +39,7 @@ class BufferNotebook:
     def enable(self):
         self.enabled = True
         self.on_change()
+        self.on_cursor_moved()
         self.nvim.out_write("BufferNotebook enabled\n")
 
     def disable(self):
@@ -89,7 +91,7 @@ class BufferNotebook:
 
     @staticmethod
     def _has_mark(line):
-        return re.search(r"#\s*=\s*$", line) or re.search(r"^#\s<<<\s*$", line)
+        return re.search(r"#\s*=\s*$", line) or re.search(r"#\s*<<<\s*$", line)
 
     @functools.lru_cache
     def parse(self, lines: tuple[str, ...]) -> ast.Module:
@@ -275,7 +277,10 @@ class BufferNotebook:
             return
 
         lines = tuple(self.nvim.api.buf_get_lines(self.buffer, 0, -1, False))
-        current_line_position = self.nvim.api.win_get_cursor(0)[0] - 1
+        current_line_position, currenct_cursor_position = self.nvim.api.win_get_cursor(
+            0
+        )
+        current_line_position -= 1
 
         if not self._has_mark(lines[current_line_position]):
             return
@@ -298,7 +303,7 @@ class BufferNotebook:
                 "relative": "cursor",
                 "width": width,
                 "height": height,
-                "col": 0,
+                "col": -currenct_cursor_position,
                 "row": 1,
                 "style": "minimal",
                 "border": "single",

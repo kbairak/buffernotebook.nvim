@@ -3,7 +3,8 @@ import functools
 import pprint
 import re
 import threading
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 import pynvim
 import pynvim.api
@@ -17,8 +18,66 @@ import pynvim.api
 # - [✅] Copy to clipboard
 # - [✅] Show multiline annotations in popup on hover
 # - [✅] Annotate import statements
-# - [ ] Don't run python while python is running
+# - [✅] Don't run python while python is running
 # - [ ] Disable folds for popup window
+
+
+@dataclass
+class Timer:
+    """Timer utility, is initialized with a callback.
+
+    - Responds to events by invoking a delay
+    - Every time an event arrives, a timer starts
+    - If an event arrives before the previous timer has finished, the timer is cancelled and
+      replaced by a new one
+    - When the timer finishes, the callback is invoked
+    - If an event arrives before the callback is finished, a timer is set again (in parallel)
+    - However, if the timer finishes while the callback is still running, the callback is not
+      invoked immediately but waits until the previous callback finishes
+
+    Simple scenario:
+
+        event -> timer_start -> timer_finish -> callback_start -> callback_finish
+
+    Event while timer is running:
+
+        event -> timer_start -> event -> timer_cancel -> new_timer_start -> new_timer_finish
+            -> callback_start -> callback_finish
+
+    Event while callback is running, callback finishes before new timer:
+
+        event -> timer_start -> timer_finish -> callback_start -> event -> new_timer_start
+            -> callback_finish -> new_timer_finish -> new_callback_start -> new_callback_finish
+
+    Event while callback is running, new_timer finishes before callback:
+
+        event -> timer_start -> timer_finish -> callback_start -> event -> new_timer_start
+            -> new_timer_finish -> callback_finish -> new_callback_start -> new_callback_finish
+    """
+
+    callback: Callable[[], None]
+    delay: float = 0.3
+    _timer: threading.Timer | None = None
+    _is_executing: bool = False
+    _execute_on_finish: bool = False
+
+    def event(self):
+        if self._timer is not None:
+            self._timer.cancel()
+        self._timer = threading.Timer(self.delay, self._on_timeout)
+        self._timer.start()
+
+    def _on_timeout(self):
+        self._timer = None
+        if self._is_executing:
+            self._execute_on_finish = True
+        else:
+            self._is_executing = True
+            self.callback()
+            self._is_executing = False
+            if self._execute_on_finish:
+                self._execute_on_finish = False
+                self.callback()
 
 
 nothing_to_show = object()
@@ -36,7 +95,7 @@ class BufferNotebook:
         self._cache: list[tuple[str, Any]] = []
         self._popup_window = None
 
-        self._timer: Optional[threading.Timer] = None
+        self._timer = Timer(lambda: self._nvim.async_call(self._evaluate_and_annotate))
 
     def enable(self):
         self._enabled = True
@@ -93,12 +152,7 @@ class BufferNotebook:
         if not self._enabled:
             return
         self._remove_popup()
-        if self._timer is not None:
-            self._timer.cancel()
-        self._timer = threading.Timer(
-            0.3, lambda: self._nvim.async_call(self._evaluate_and_annotate)
-        )
-        self._timer.start()
+        self._timer.event()
 
     def on_cursor_moved(self):
         self._remove_popup()
@@ -180,7 +234,6 @@ class BufferNotebook:
         return ("",) + BufferNotebook._remove_unparseable_lines(lines[1:])
 
     def _evaluate_and_annotate(self):
-        self._timer = None
         self._clear()
 
         lines = tuple(self._nvim.api.buf_get_lines(self._buffer, 0, -1, False))

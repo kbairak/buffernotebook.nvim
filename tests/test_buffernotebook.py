@@ -1,6 +1,5 @@
 import ast
 import sys
-import threading
 import typing
 from pathlib import Path
 from unittest import mock
@@ -9,7 +8,7 @@ import pytest
 
 sys.path.append(str((Path() / "rplugin" / "python3").resolve()))
 
-from buffernotebook import BufferNotebook
+from buffernotebook import BufferNotebook, Timer
 
 
 @pytest.fixture
@@ -19,8 +18,8 @@ def bn():
     buffer = mock.MagicMock(name="buffer")
     bn = BufferNotebook(nvim, buffer)
     yield bn
-    if bn._timer is not None:
-        bn._timer.cancel()
+    if bn._timer._timer is not None:
+        bn._timer._timer.cancel()
 
 
 def test_init(bn):
@@ -28,7 +27,7 @@ def test_init(bn):
     bn._nvim.api.create_namespace.assert_called_once_with("BufferNotebookNamepsace")
     assert bn._globals == {"__name__": "__main__"}
     assert bn._cache == []
-    assert bn._timer is None
+    assert bn._timer._timer is None
     assert bn._popup_window is None
 
 
@@ -39,7 +38,7 @@ def test_enable(bn):
     bn.enable()
 
     assert bn._enabled
-    assert isinstance(bn._timer, threading.Timer)
+    assert isinstance(bn._timer, Timer)
     bn._nvim.api.buf_get_lines.assert_called_once_with(bn._buffer, 0, -1, False)
     bn._nvim.api.win_get_cursor.assert_called_once_with(0)
     bn._nvim.out_write.assert_called_once_with("BufferNotebook enabled\n")

@@ -20,6 +20,7 @@ import pynvim.api
 # - [✅] Annotate import statements
 # - [✅] Don't run python while python is running
 # - [✅] Disable folds for popup window
+# - [ ] Show running state (using `buf_set_extmark`)
 
 
 @dataclass
@@ -91,7 +92,7 @@ class BufferNotebook:
         self._enabled = False
         self._namespace = self._nvim.api.create_namespace("BufferNotebookNamepsace")
 
-        self._globals = {"__name__": "__main__"}
+        self._globals: dict = {"__name__": "__main__"}
         self._cache: list[tuple[str, Any]] = []
         self._popup_window = None
 

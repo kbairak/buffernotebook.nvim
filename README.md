@@ -33,7 +33,8 @@ system globally.
   cmd = "BufferNotebook",  -- For lazy loading
   init = function()
     vim.keymap.set("n", "<Leader>bn", ":BufferNotebook toggle<CR>")
-    vim.keymap.set("n", "<Leader>bN", ":BufferNotebook inject<CR>")
+    vim.keymap.set("n", "<Leader>bi", ":BufferNotebook inject<CR>")
+    vim.keymap.set("n", "<Leader>bc", ":BufferNotebook copy<CR>")
   end,
 }
 ```
@@ -142,6 +143,10 @@ You can assign values or computations to variables and they will be remembered:
     # ... hello hello hello hello 
     ```
 
+- You can also copy the output of a statement with `:BufferNotebook copy`. This
+  will copy the output of the statement the cursor is over to the system
+  clipboard. Again, this is useful if the output has multi-line content.
+
 ## How it works
 
 - Evaluations are performed on a delay to prevent triggering many potentially
@@ -195,9 +200,10 @@ You can assign values or computations to variables and they will be remembered:
 
   - Assignments will annotate the value that was just assigned
   - Expressions will annotate the evaluated value
+  - Import statements will show what was imported
   - Statements that raise an exception will annotate the exception prefixed by a
     `!`
-  - Other statements (for example `import re  #=`) will not annotate anything
+  - Other statements
 
 ## Examples of usage
 

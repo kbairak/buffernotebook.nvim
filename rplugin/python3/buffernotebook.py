@@ -19,7 +19,7 @@ import pynvim.api
 # - [✅] Show multiline annotations in popup on hover
 # - [✅] Annotate import statements
 # - [✅] Don't run python while python is running
-# - [ ] Disable folds for popup window
+# - [✅] Disable folds for popup window
 
 
 @dataclass
@@ -193,6 +193,7 @@ class BufferNotebook:
                 "border": "single",
             },
         )
+        self._nvim.api.win_set_option(self._popup_window, "foldenable", False)
 
     def _clear(self):
         self._nvim.api.buf_clear_namespace(self._buffer, self._namespace, 0, -1)
@@ -221,16 +222,16 @@ class BufferNotebook:
             except Exception:
                 end -= 1
             else:
-                # Good:   [G G G]           B G G
-                # Return: [G G G] + _parse([B G G])
+                # Good:   [G G G]                              B G G
+                # Return: [G G G] + _remove_unparseable_lines([B G G])
                 return lines[:end] + BufferNotebook._remove_unparseable_lines(
                     lines[end:]
                 )
 
         # Ended the for-loop without encountering a good chunk; (at least) first line must be bad
-        #          B             B             G G ...
-        # Return: [""] + _parse([B             G G ...])
-        # Return: [""] +        [""] + _parse([G G ...])
+        #          B                                B                                G G ...
+        # Return: [""] + _remove_unparseable_lines([B                                G G ...])
+        # Return: [""] +                           [""] + _remove_unparseable_lines([G G ...])
         return ("",) + BufferNotebook._remove_unparseable_lines(lines[1:])
 
     def _evaluate_and_annotate(self):

@@ -58,7 +58,7 @@ class Timer:
 
     callback: Callable[[], None]
     delay: float = 0.3
-    _timer: threading.Timer | None = None
+    _timer: Optional[threading.Timer] = None
     _is_executing: bool = False
     _execute_on_finish: bool = False
 
@@ -131,7 +131,7 @@ class BufferNotebook:
             inject_at,
             inject_at,
             False,
-            [f"# >>> {chunks[0]}"] + [f"# ... {chunk}" for chunk in chunks[1:]],
+            [f"# <<< {chunks[0]}"] + [f"# ... {chunk}" for chunk in chunks[1:]],
         )
 
     def copy(self):
@@ -380,7 +380,7 @@ class BufferNotebook:
             if (
                 statement.lineno - 1
                 <= current_line_position
-                <= (statement.end_lineno or statement.lineno)
+                < (statement.end_lineno or statement.lineno)
             ):
                 return result, statement
 
@@ -405,8 +405,11 @@ class BufferNotebook:
         )
 
     def _remove_popup(self):
-        if self._popup_window is not None:
-            self._nvim.api.win_close(self._popup_window, True)
+        try:
+            if self._popup_window is not None:
+                self._nvim.api.win_close(self._popup_window, True)
+                self._popup_window = None
+        except Exception:
             self._popup_window = None
 
 

@@ -90,10 +90,10 @@ You can assign values or computations to variables and they will be remembered:
   change from `a + 1  #= 2` to `a + 1  #= 3`.
 
 - And you can import modules or define functions and use them:
-  
+
   ```python
   import ast
-  
+
   ast.dump(ast.parse('a = 1'))
   # <<< Module(body=[Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=1))])
   ```
@@ -110,7 +110,6 @@ You can assign values or computations to variables and they will be remembered:
   statement the cursor is over in the buffer. This is especially useful if you
   want to copy the result and paste it somewhere else or if the output is so
   big it doesn't fit the window well.
-
   - For example, running `inject` on this:
 
     ```python
@@ -137,10 +136,10 @@ You can assign values or computations to variables and they will be remembered:
 
     ```python
     "\n".join(['hello ' * 4] * 4)
-    # <<< hello hello hello hello 
-    # ... hello hello hello hello 
-    # ... hello hello hello hello 
-    # ... hello hello hello hello 
+    # <<< hello hello hello hello
+    # ... hello hello hello hello
+    # ... hello hello hello hello
+    # ... hello hello hello hello
     ```
 
 - You can also copy the output of a statement with `:BufferNotebook copy`. This
@@ -156,7 +155,7 @@ You can assign values or computations to variables and they will be remembered:
   parsed by python. So this
 
   ```python
-  a = 1 
+  a = 1
   This is a line that cannot possibly be parsed by Python
   a + 2  #=
   ```
@@ -164,8 +163,8 @@ You can assign values or computations to variables and they will be remembered:
   will be parsed as
 
   ```python
-  a = 1 
-  
+  a = 1
+
   a + 2  #=
   ```
 
@@ -173,7 +172,6 @@ You can assign values or computations to variables and they will be remembered:
   and which statements they correspond to
 
 - Next, the top-level statements are executed in order.
-
   - A cache is used to avoid doing unnecessary computations and invalidating
     experiments that depend on randomness. Editing a line will trigger this
     line's reevaluation and all lines after that. The statements that came
@@ -197,7 +195,6 @@ You can assign values or computations to variables and they will be remembered:
 
 - A statement that was just evaluated and that has a `#=` or `# <<<` mark
   associated with it will annotate the buffer with the result of that statement.
-
   - Assignments will annotate the value that was just assigned
   - Expressions will annotate the evaluated value
   - Import statements will show what was imported
@@ -217,3 +214,8 @@ works by tweaking simple use cases in real time.
 ### Understanding how `lxml` works
 
 <https://github.com/user-attachments/assets/b86b540c-f2a6-4637-9650-11df22ddaf20>
+
+## TODOs
+
+- [ ] Redraw outputs written by `BufferNotebook inject` (on a delay)
+- [ ] Apply `ruff` or `black` on injected outputs to make them more readable
